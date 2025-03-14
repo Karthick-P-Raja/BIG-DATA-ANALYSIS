@@ -1,0 +1,65 @@
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.master("local").appName("NYC_Taxi_Analysis").getOrCreate()
+
+df = spark.read.csv("file:///Users/karthickraja/Downloads/prj.csv", header=True, inferSchema=True)
+
+df.printSchema()  
+df.describe().show()
+df.columns
+df.count()
+df = df.dropna()
+df = df.dropDuplicates()
+
+from pyspark.sql.functions import col, to_timestamp
+
+df = df.withColumn("pickup_datetime", to_timestamp(col("pickup_datetime")))
+df = df.withColumn("dropoff_datetime", to_timestamp(col("dropoff_datetime")))
+df.printSchema()
+
+from pyspark.sql.functions import (unix_timestamp, col)
+
+df = df.withColumn("trip_duration_min", 
+    (unix_timestamp(col("dropoff_datetime")) - unix_timestamp(col("pickup_datetime"))) / 60)
+df.select("trip_duration", "trip_duration_min").show(5)
+
+df.groupBy("passenger_count").count().orderBy("count", ascending=False).show()
+df.groupBy("vendor_id").avg("trip_duration_min").show()
+
+from pyspark.sql.functions import hour
+
+df = df.withColumn("hour_of_day", hour(col("pickup_datetime")))
+df.groupBy("hour_of_day").count().orderBy("hour_of_day").show()
+
+import pandas as pd
+
+df_pd = df.select("hour_of_day", "trip_duration_min").toPandas()
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+plt.figure(figsize=(10, 5))
+sns.boxplot(x="hour_of_day", y="trip_duration_min", data=df_pd)
+plt.title("Trip Duration by Hour of Day")
+plt.xlabel("Hour of Day")
+plt.ylabel("Trip Duration (min)")
+plt.show()
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Convert PySpark DataFrame to Pandas
+df_pd = df.select("trip_duration_min").toPandas()
+
+# Plot histogram
+plt.figure(figsize=(10, 5))
+sns.histplot(df_pd["trip_duration_min"], bins=50, kde=True)
+plt.xlim(0, 100)  # Limit duration to 100 min for better visualization
+plt.title("Distribution of Trip Durations")
+plt.xlabel("Trip Duration (minutes)")
+plt.ylabel("Count of Trips")
+plt.show()
+
+df.toPandas().to_csv("processed_nyc_taxi.csv", index=False)
+
+df.write.csv("/Users/karthickraja/Downloads/finalPrj.csv", header=True, mode="overwrite")
